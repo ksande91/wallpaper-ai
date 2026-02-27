@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wallpaper-ai"
+version = "0.1.0"
+description = "AI-powered wallpaper generator for Hyprland"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Krisn" }
+]
+dependencies = [
+    "anthropic>=0.40.0",
+    "fal-client>=0.5.0",
+    "google-genai>=1.0.0",
+    "textual>=0.89.0",
+    "toml>=0.10.2",
+    "aiohttp>=3.9.0",
+    "rich>=13.0.0",
+    "click>=8.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+wallpaper-ai = "wallpaper_ai.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wallpaper_ai"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

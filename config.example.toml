@@ -1,0 +1,63 @@
+# Wallpaper AI Configuration
+# Copy this file to ~/.config/wallpaper-ai/config.toml
+
+[generation]
+# Image generation provider: "fal" or "gemini"
+provider = "fal"
+
+# Model name (provider-specific)
+# FAL: sdxl (default, good style control), sdxl-lightning (fast), flux-schnell, flux-dev, flux-pro
+# Gemini: imagen-3
+model = "sdxl"
+
+# Claude model for prompt generation
+claude_model = "claude-sonnet-4-5-20250929"
+
+# Image dimensions (16:9 aspect ratio recommended for desktop wallpapers)
+width = 1920
+height = 1080
+
+[wallpaper]
+# swww transition settings
+# Transition types: grow, wipe, fade, left, right, top, bottom, center, outer, random
+transition_type = "grow"
+
+# Transition duration in seconds
+transition_duration = 1.5
+
+# Frames per second for smooth transitions
+transition_fps = 60
+
+[theming]
+# Enable pywal integration to generate terminal colors from wallpapers
+# Requires pywal to be installed (python-pywal package)
+enable_pywal = true
+
+# Enable hyprlock background updates
+# Automatically sets the lock screen wallpaper in ~/.config/hypr/hyprlock.conf
+enable_hyprlock = true
+
+[learning]
+# Minimum number of ratings before generating preference summary
+min_ratings_for_preferences = 5
+
+# Regenerate preferences every N new ratings
+ratings_per_regeneration = 10
+
+# Number of top-rated examples to include in prompt context
+top_rated_examples = 5
+
+# Number of low-rated examples to include (to avoid similar results)
+low_rated_examples = 3
+
+[categories]
+# Available categories (can be customized)
+# Default: Sci-Fi, Nature, Fantasy, Abstract, Cyberpunk, Space, Architecture
+
+[styles]
+# Available styles (can be customized)
+# Default: Realistic, Digital Painting, Anime, Oil Painting, Minimalist, Photographic
+
+[moods]
+# Available moods (can be customized)
+# Default: Epic, Serene, Dark, Vibrant, Mysterious, Dreamy

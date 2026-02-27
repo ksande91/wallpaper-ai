@@ -1,0 +1,76 @@
+"""Configuration loading utilities."""
+
+from pathlib import Path
+
+import toml
+
+
+def get_config_path() -> Path:
+    """Get the config file path."""
+    return Path.home() / ".config" / "wallpaper-ai" / "config.toml"
+
+
+def load_config() -> dict:
+    """Load configuration from file."""
+    config_path = get_config_path()
+    if config_path.exists():
+        return toml.load(config_path)
+    return {}
+
+
+def get_theming_config() -> tuple[bool, bool]:
+    """Get theming configuration options.
+
+    Returns:
+        Tuple of (enable_pywal, enable_hyprlock)
+    """
+    config = load_config()
+    theming = config.get("theming", {})
+    return (
+        theming.get("enable_pywal", True),
+        theming.get("enable_hyprlock", True),
+    )
+
+
+def get_generation_config() -> dict:
+    """Get generation configuration options.
+
+    Returns:
+        Dict with provider, model, width, height settings
+    """
+    config = load_config()
+    generation = config.get("generation", {})
+
+    provider = generation.get("provider", "fal")
+
+    # Map friendly model names to API model IDs
+    fal_models = {
+        "sdxl": "fal-ai/fast-sdxl",
+        "sdxl-lightning": "fal-ai/fast-lightning-sdxl",
+        "flux-schnell": "fal-ai/flux/schnell",
+        "flux-dev": "fal-ai/flux/dev",
+        "flux-pro": "fal-ai/flux-pro",
+    }
+
+    gemini_models = {
+        "imagen-3": "imagen-3.0-generate-002",
+        "gemini-2.5-flash-image": "gemini-2.5-flash-image",
+        "gemini-3-pro": "gemini-3-pro-image-preview",
+    }
+
+    # Get model name with provider-appropriate default
+    default_model = "sdxl" if provider == "fal" else "imagen-3"
+    model_name = generation.get("model", default_model)
+
+    # Map to API model ID based on provider
+    if provider == "fal":
+        model_id = fal_models.get(model_name, model_name)
+    else:
+        model_id = gemini_models.get(model_name, model_name)
+
+    return {
+        "provider": provider,
+        "model": model_id,
+        "width": generation.get("width", 1920),
+        "height": generation.get("height", 1080),
+    }
