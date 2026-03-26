@@ -6,9 +6,9 @@
 provider = "fal"
 
 # Model name (provider-specific)
-# FAL: sdxl (default, good style control), sdxl-lightning (fast), flux-schnell, flux-dev, flux-pro
+# FAL: nano-banana-2 (default), sdxl (good style control), sdxl-lightning (fast), flux-schnell, flux-dev, flux-pro
 # Gemini: imagen-3
-model = "sdxl"
+model = "nano-banana-2"
 
 # Claude model for prompt generation
 claude_model = "claude-sonnet-4-5-20250929"
@@ -18,7 +18,7 @@ width = 1920
 height = 1080
 
 [wallpaper]
-# swww transition settings
+# awww transition settings
 # Transition types: grow, wipe, fade, left, right, top, bottom, center, outer, random
 transition_type = "grow"
 

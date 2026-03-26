@@ -7,7 +7,7 @@ AI-powered wallpaper generator for Arch Linux + Hyprland. Generates unique deskt
 - **Interactive Terminal UI** - Beautiful Textual-based interface for selecting categories, styles, and moods
 - **AI Prompt Generation** - Uses Claude to create detailed, evocative image prompts
 - **Multiple Image Providers** - FAL.ai (SDXL, FLUX) or Google Gemini (Imagen, native generation)
-- **swww Integration** - Smooth wallpaper transitions with configurable effects
+- **awww Integration** - Smooth wallpaper transitions with configurable effects
 - **pywal Integration** - Auto-generate terminal, Hyprland, and Waybar colors from wallpapers
 - **Rating System** - Rate wallpapers 1-5 stars to train the preference model
 - **Preference Learning** - System learns from your ratings to generate better wallpapers
@@ -17,7 +17,7 @@ AI-powered wallpaper generator for Arch Linux + Hyprland. Generates unique deskt
 
 - Arch Linux with Hyprland
 - Python 3.11+
-- swww (wallpaper daemon)
+- awww (wallpaper daemon)
 - pywal (optional, for color generation)
 - API keys for Anthropic (Claude) and your chosen image provider
 
@@ -62,13 +62,13 @@ This creates:
 - Database at `~/.local/share/wallpaper-ai/wallpapers.db`
 - Images directory at `~/.local/share/wallpaper-ai/images/`
 
-### swww Setup
+### awww Setup
 
-Ensure swww-daemon is running (add to Hyprland startup):
+Ensure awww-daemon is running (add to Hyprland startup):
 
 ```conf
 # ~/.config/hypr/hyprland.conf
-exec-once = swww-daemon
+exec-once = awww-daemon
 ```
 
 ### Hyprland Keybinds
@@ -148,7 +148,7 @@ wallpaper-ai --keybinds
    - Low-rated examples to avoid
    - Your preference summary
 3. **Image Generation**: FAL.ai or Gemini generates a 1920x1080 wallpaper
-4. **Wallpaper Setting**: swww applies the wallpaper with smooth transition
+4. **Wallpaper Setting**: awww applies the wallpaper with smooth transition
 5. **Rating**: Rate the wallpaper to improve future generations
 
 ## Learning System

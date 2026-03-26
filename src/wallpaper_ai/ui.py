@@ -438,7 +438,7 @@ class GeneratingScreen(Screen):
                 if results.get("hyprlock"):
                     self.notify("Lock screen updated")
             except wallpaper.WallpaperError as e:
-                # Don't fail completely if swww isn't running
+                # Don't fail completely if awww isn't running
                 self.notify(str(e), severity="warning")
 
             # Show success

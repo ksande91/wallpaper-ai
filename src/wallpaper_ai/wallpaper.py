@@ -1,4 +1,4 @@
-"""Wallpaper setting via swww with pywal and hyprlock integration."""
+"""Wallpaper setting via awww with pywal and hyprlock integration."""
 
 import subprocess
 from pathlib import Path
@@ -196,7 +196,7 @@ def apply_pywal_colors(image_path: str | Path) -> dict:
     # Ensure pywal templates are set up for Hyprland and Waybar
     setup_pywal_templates()
 
-    # -n flag: skip setting wallpaper (we handle that with swww)
+    # -n flag: skip setting wallpaper (we handle that with awww)
     # -i flag: specify image file
     cmd = ["wal", "-n", "-i", str(image_path)]
 
@@ -297,10 +297,10 @@ def update_hyprlock_background(image_path: str | Path) -> bool:
     return True
 
 
-def check_swww_daemon() -> bool:
-    """Check if swww-daemon is running."""
+def check_awww_daemon() -> bool:
+    """Check if awww-daemon is running."""
     result = subprocess.run(
-        ["pgrep", "-x", "swww-daemon"],
+        ["pgrep", "-x", "awww-daemon"],
         capture_output=True,
     )
     return result.returncode == 0
@@ -314,7 +314,7 @@ def set_wallpaper(
     apply_pywal: bool = True,
     update_hyprlock: bool = True,
 ) -> dict:
-    """Set the wallpaper using swww with optional pywal and hyprlock integration.
+    """Set the wallpaper using awww with optional pywal and hyprlock integration.
 
     Args:
         image_path: Path to the image file
@@ -339,13 +339,13 @@ def set_wallpaper(
     if not image_path.exists():
         raise WallpaperError(f"Image not found: {image_path}")
 
-    if not check_swww_daemon():
+    if not check_awww_daemon():
         raise WallpaperError(
-            "swww-daemon is not running. Start it with: swww-daemon &"
+            "awww-daemon is not running. Start it with: awww-daemon &"
         )
 
     cmd = [
-        "swww",
+        "awww",
         "img",
         str(image_path),
         "--transition-type",
@@ -378,12 +378,12 @@ def set_wallpaper(
 
 
 def get_current_wallpaper() -> Optional[str]:
-    """Get the current wallpaper path from swww."""
-    if not check_swww_daemon():
+    """Get the current wallpaper path from awww."""
+    if not check_awww_daemon():
         return None
 
     result = subprocess.run(
-        ["swww", "query"],
+        ["awww", "query"],
         capture_output=True,
         text=True,
     )

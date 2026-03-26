@@ -22,6 +22,7 @@ AVAILABLE_MODELS = {
     "flux-schnell": "fal-ai/flux/schnell",
     "flux-dev": "fal-ai/flux/dev",
     "flux-pro": "fal-ai/flux-pro",
+    "nano-banana-2": "fal-ai/nano-banana-2",
 }
 
 GEMINI_MODELS = {
@@ -58,6 +59,19 @@ def get_closest_gemini_aspect_ratio(width: int, height: int) -> str:
     target_ratio = width / height
     closest = min(GEMINI_ASPECT_RATIOS, key=lambda r: abs(r[0] / r[1] - target_ratio))
     return f"{closest[0]}:{closest[1]}"
+
+def get_resolution_for_size(width: int, height: int) -> str:
+    """Map target dimensions to a Nano Banana 2 resolution tier."""
+    max_dim = max(width, height)
+    if max_dim <= 512:
+        return "0.5K"
+    elif max_dim <= 1024:
+        return "1K"
+    elif max_dim <= 2048:
+        return "2K"
+    else:
+        return "4K"
+
 
 # Negative prompts to exclude conflicting styles
 STYLE_NEGATIVE_PROMPTS = {
@@ -303,26 +317,41 @@ def generate_image(
     # Ensure FAL key is available
     get_fal_key()
 
-    # Calculate optimal generation size (may need upscaling for ultrawide)
-    gen_width, gen_height, upscale_factor = calculate_generation_size(width, height)
-
     # Build arguments based on model type
-    arguments = {
-        "prompt": prompt,
-        "image_size": {
-            "width": gen_width,
-            "height": gen_height,
-        },
-        "num_images": 1,
-    }
+    is_nano_banana = "nano-banana" in model
 
-    # Add SDXL-specific parameters
-    if "sdxl" in model:
-        arguments["negative_prompt"] = get_negative_prompt(style)
-        arguments["guidance_scale"] = 9.0  # Higher for better prompt adherence
-        arguments["num_inference_steps"] = 30
+    if is_nano_banana:
+        # Nano Banana 2 uses aspect_ratio and resolution instead of image_size
+        resolution = get_resolution_for_size(width, height)
+        arguments = {
+            "prompt": prompt,
+            "num_images": 1,
+            "aspect_ratio": "auto",
+            "resolution": resolution,
+        }
+        upscale_factor = 1
+        gen_width, gen_height = width, height
+        print(f"DEBUG: Nano Banana 2 with aspect_ratio=auto, resolution={resolution}")
     else:
-        arguments["enable_safety_checker"] = True
+        # Calculate optimal generation size (may need upscaling for ultrawide)
+        gen_width, gen_height, upscale_factor = calculate_generation_size(width, height)
+
+        arguments = {
+            "prompt": prompt,
+            "image_size": {
+                "width": gen_width,
+                "height": gen_height,
+            },
+            "num_images": 1,
+        }
+
+        # Add SDXL-specific parameters
+        if "sdxl" in model:
+            arguments["negative_prompt"] = get_negative_prompt(style)
+            arguments["guidance_scale"] = 9.0  # Higher for better prompt adherence
+            arguments["num_inference_steps"] = 30
+        else:
+            arguments["enable_safety_checker"] = True
 
     # Debug: print what we're sending
     print(f"DEBUG: Target size: {width}x{height}, generating at: {gen_width}x{gen_height}, upscale: {upscale_factor}x")
@@ -443,26 +472,37 @@ async def generate_image_async(
     # Ensure FAL key is available
     get_fal_key()
 
-    # Calculate optimal generation size (may need upscaling for ultrawide)
-    gen_width, gen_height, upscale_factor = calculate_generation_size(width, height)
-
     # Build arguments based on model type
-    arguments = {
-        "prompt": prompt,
-        "image_size": {
-            "width": gen_width,
-            "height": gen_height,
-        },
-        "num_images": 1,
-    }
+    is_nano_banana = "nano-banana" in model
 
-    # Add SDXL-specific parameters
-    if "sdxl" in model:
-        arguments["negative_prompt"] = get_negative_prompt(style)
-        arguments["guidance_scale"] = 9.0
-        arguments["num_inference_steps"] = 30
+    if is_nano_banana:
+        resolution = get_resolution_for_size(width, height)
+        arguments = {
+            "prompt": prompt,
+            "num_images": 1,
+            "aspect_ratio": "auto",
+            "resolution": resolution,
+        }
     else:
-        arguments["enable_safety_checker"] = True
+        # Calculate optimal generation size (may need upscaling for ultrawide)
+        gen_width, gen_height, upscale_factor = calculate_generation_size(width, height)
+
+        arguments = {
+            "prompt": prompt,
+            "image_size": {
+                "width": gen_width,
+                "height": gen_height,
+            },
+            "num_images": 1,
+        }
+
+        # Add SDXL-specific parameters
+        if "sdxl" in model:
+            arguments["negative_prompt"] = get_negative_prompt(style)
+            arguments["guidance_scale"] = 9.0
+            arguments["num_inference_steps"] = 30
+        else:
+            arguments["enable_safety_checker"] = True
 
     # Generate the image
     handler = await fal_client.submit_async(
@@ -478,7 +518,7 @@ async def generate_image_async(
     image_url = result["images"][0]["url"]
 
     # Upscale if needed (sync call within async - could be improved)
-    if upscale_factor > 1:
+    if not is_nano_banana and upscale_factor > 1:
         image_url = upscale_image(image_url, upscale_factor)
 
     # Download and save the image

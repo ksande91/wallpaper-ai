@@ -50,6 +50,7 @@ def get_generation_config() -> dict:
         "flux-schnell": "fal-ai/flux/schnell",
         "flux-dev": "fal-ai/flux/dev",
         "flux-pro": "fal-ai/flux-pro",
+        "nano-banana-2": "fal-ai/nano-banana-2",
     }
 
     gemini_models = {
@@ -59,7 +60,7 @@ def get_generation_config() -> dict:
     }
 
     # Get model name with provider-appropriate default
-    default_model = "sdxl" if provider == "fal" else "imagen-3"
+    default_model = "nano-banana-2" if provider == "fal" else "imagen-3"
     model_name = generation.get("model", default_model)
 
     # Map to API model ID based on provider
