@@ -1,6 +1,7 @@
 """Claude API integration for generating image prompts."""
 
 import os
+import random
 from typing import Optional
 
 import anthropic
@@ -63,7 +64,8 @@ Key requirements for all prompts:
 - Suitable for desktop wallpaper (balanced composition, not too busy in corners)
 - High quality, detailed descriptions that evoke mood and atmosphere
 - Focus on lighting, color palette, and atmosphere
-- IMPORTANT: Explicitly include the requested art style in your prompt (e.g., "anime style", "digital painting", "oil painting style", "photorealistic"). The image generator needs clear style keywords to render correctly.
+- IMPORTANT: Explicitly include the requested art style(s) in your prompt (e.g., "anime style", "digital painting", "oil painting style", "photorealistic"). The image generator needs clear style keywords to render correctly.
+- When the user supplies multiple categories or styles (comma-separated), blend them into a single coherent scene rather than describing them separately. Treat the combination as the creative brief (e.g., "Sci-Fi + Cyberpunk" → one scene with both genres infused).
 
 Output ONLY the prompt text, no explanations or formatting."""
 
@@ -186,87 +188,135 @@ def generate_prompt(
     return message.content[0].text.strip()
 
 
+def _score_increment(rating: int) -> float:
+    """Convert a 1-5 rating into a sampling-weight increment.
+
+    5★ adds a lot, 3★ is neutral-ish, 1-2★ adds almost nothing (but never zero,
+    so a previously-disliked value can still recover if it gets a good rating later).
+    """
+    table = {1: 0.05, 2: 0.2, 3: 0.6, 4: 1.5, 5: 3.0}
+    return table.get(rating, 0.5)
+
+
+def _build_weights(
+    values: list[str],
+    rated: list[db.Generation],
+    field: str,
+) -> tuple[dict[str, float], dict[str, int]]:
+    """Compute sampling weights + observation counts for a dimension.
+
+    Splits comma-separated values (e.g. "Sci-Fi, Cyberpunk") so each contributes
+    independently. Uses a uniform prior of 1.0 so every option keeps a real chance.
+    """
+    weights = {v: 1.0 for v in values}
+    counts = {v: 0 for v in values}
+    for gen in rated:
+        raw = getattr(gen, field) or ""
+        for token in (t.strip() for t in raw.split(",")):
+            if token in weights and gen.rating is not None:
+                weights[token] += _score_increment(gen.rating)
+                counts[token] += 1
+    return weights, counts
+
+
+def _sample_dimension(
+    values: list[str],
+    rated: list[db.Generation],
+    field: str,
+    explore_rate: float = 0.25,
+) -> str:
+    """Pick one value via weighted sampling, or uniformly from underexplored ones."""
+    weights, counts = _build_weights(values, rated, field)
+
+    if random.random() < explore_rate:
+        min_count = min(counts.values())
+        underexplored = [v for v, c in counts.items() if c <= min_count + 1]
+        if underexplored:
+            return random.choice(underexplored)
+
+    return random.choices(list(weights.keys()), weights=list(weights.values()), k=1)[0]
+
+
 def generate_random_prompt(
     model: str = "claude-sonnet-4-5-20250929",
 ) -> tuple[str, str, str, str]:
-    """Generate a random prompt based on learned preferences.
+    """Generate a random prompt using weighted sampling over rated history.
+
+    Replaces the previous "ask Claude to pick the best combo" approach, which
+    converged on the same selections. Sampling gives every well-rated value a
+    real chance, and 25% of generations actively explore underused options.
 
     Returns:
         Tuple of (prompt, category, style, mood)
     """
-    import random
+    rated = db.get_rated_generations()
 
-    client = anthropic.Anthropic(api_key=get_anthropic_key())
-
-    # Get preference summary and examples
-    top_rated = db.get_top_rated(limit=5)
-    pref = db.get_latest_preference()
-
-    # Build context
-    context_parts = []
-
-    if pref:
-        context_parts.append(f"USER PREFERENCES:\n{pref.summary_text}")
-
-    if top_rated:
-        context_parts.append("\nHIGHLY RATED EXAMPLES:")
-        for gen in top_rated:
-            context_parts.append(f"- Category: {gen.category}, Style: {gen.style}, Mood: {gen.mood}")
-
-    # If no history, use random selections
-    if not top_rated and not pref:
+    if not rated:
         category = random.choice(CATEGORIES)
         style = random.choice(STYLES)
         mood = random.choice(MOODS)
     else:
-        # Let Claude choose based on preferences
-        selection_prompt = f"""{chr(10).join(context_parts)}
+        category = _sample_dimension(CATEGORIES, rated, "category")
+        style = _sample_dimension(STYLES, rated, "style")
+        mood = _sample_dimension(MOODS, rated, "mood")
 
-Based on the user's preferences and highly-rated examples, choose the best combination for a new wallpaper.
-
-Available options:
-- Categories: {', '.join(CATEGORIES)}
-- Styles: {', '.join(STYLES)}
-- Moods: {', '.join(MOODS)}
-
-Respond with EXACTLY three lines:
-CATEGORY: <chosen category>
-STYLE: <chosen style>
-MOOD: <chosen mood>"""
-
-        selection = client.messages.create(
-            model=model,
-            max_tokens=100,
-            messages=[{"role": "user", "content": selection_prompt}],
-        )
-
-        # Parse the response
-        lines = selection.content[0].text.strip().split("\n")
-        category = style = mood = None
-
-        for line in lines:
-            if line.startswith("CATEGORY:"):
-                category = line.split(":", 1)[1].strip()
-            elif line.startswith("STYLE:"):
-                style = line.split(":", 1)[1].strip()
-            elif line.startswith("MOOD:"):
-                mood = line.split(":", 1)[1].strip()
-
-        # Fallback to random if parsing failed
-        if not category or category not in CATEGORIES:
-            category = random.choice(CATEGORIES)
-        if not style or style not in STYLES:
-            style = random.choice(STYLES)
-        if not mood or mood not in MOODS:
-            mood = random.choice(MOODS)
-
-    # Generate the actual prompt
-    prompt = generate_prompt(
+    prompt = _generate_random_body(
         category=category,
         style=style,
         mood=mood,
-        include_history=True,
         model=model,
     )
 
     return prompt, category, style, mood
+
+
+def _generate_random_body(
+    category: str,
+    style: str,
+    mood: str,
+    model: str,
+) -> str:
+    """Generate the prompt text for a random pick.
+
+    Unlike generate_prompt, this deliberately omits the hard preference summary
+    (sampling already encoded preferences) and asks Claude to diverge from
+    recent examples instead of mimicking them.
+    """
+    client = anthropic.Anthropic(api_key=get_anthropic_key())
+
+    recent_prompts = [g.prompt for g in db.get_recent_generations(limit=4)]
+    top_rated = db.get_top_rated(limit=2)
+
+    parts = []
+    if top_rated:
+        parts.append("Loose stylistic reference (do NOT copy — diverge in setting, subject, and composition):")
+        for gen in top_rated:
+            parts.append(f"- [{gen.category}/{gen.style}/{gen.mood}] {gen.prompt[:160]}...")
+        parts.append("")
+
+    if recent_prompts:
+        parts.append("Avoid repeating subjects/compositions from these recent generations:")
+        for p in recent_prompts:
+            parts.append(f"- {p[:140]}...")
+        parts.append("")
+
+    parts.append(f"""Generate a fresh image prompt for a desktop wallpaper with:
+- Category: {category}
+- Style: {style} (you MUST explicitly include this style in the prompt)
+- Mood(s): {mood}
+
+Be inventive — pick a different setting, time of day, color palette, or focal subject than the references above.
+Remember: 16:9 aspect ratio, no text or UI elements, suitable for desktop wallpaper.""")
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=500,
+        temperature=1.0,
+        system=build_system_prompt(),
+        messages=[{"role": "user", "content": "\n".join(parts)}],
+    )
+
+    if not message.content:
+        raise PromptGenerationError("No response from Claude")
+
+    return message.content[0].text.strip()

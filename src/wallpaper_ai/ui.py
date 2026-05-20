@@ -15,11 +15,9 @@ from textual.widgets import (
     ListItem,
     ListView,
     LoadingIndicator,
-    OptionList,
     SelectionList,
     Static,
 )
-from textual.widgets.option_list import Option
 from textual.widgets.selection_list import Selection
 
 from . import db, generator, image, preferences, wallpaper
@@ -56,11 +54,6 @@ class SelectionScreen(Screen):
         margin-bottom: 0;
     }
 
-    OptionList {
-        height: 8;
-        border: solid $primary;
-    }
-
     SelectionList {
         height: 8;
         border: solid $primary;
@@ -93,8 +86,8 @@ class SelectionScreen(Screen):
 
     def __init__(self) -> None:
         super().__init__()
-        self.selected_category = generator.CATEGORIES[0]
-        self.selected_style = generator.STYLES[0]
+        self.selected_categories: list[str] = [generator.CATEGORIES[0]]
+        self.selected_styles: list[str] = [generator.STYLES[0]]
         self.selected_moods: list[str] = [generator.MOODS[0]]
 
     def compose(self) -> ComposeResult:
@@ -103,19 +96,25 @@ class SelectionScreen(Screen):
         with Container(id="main-container"):
             with Horizontal():
                 with Vertical(id="selection-panel"):
-                    # Category selection
+                    # Category selection (multi-select)
                     with Vertical(classes="selection-row"):
-                        yield Label("Category", classes="selection-label")
-                        yield OptionList(
-                            *[Option(cat, id=cat) for cat in generator.CATEGORIES],
+                        yield Label("Category (multi-select)", classes="selection-label")
+                        yield SelectionList[str](
+                            *[
+                                Selection(cat, cat, i == 0)
+                                for i, cat in enumerate(generator.CATEGORIES)
+                            ],
                             id="category-list",
                         )
 
-                    # Style selection
+                    # Style selection (multi-select)
                     with Vertical(classes="selection-row"):
-                        yield Label("Style", classes="selection-label")
-                        yield OptionList(
-                            *[Option(style, id=style) for style in generator.STYLES],
+                        yield Label("Style (multi-select)", classes="selection-label")
+                        yield SelectionList[str](
+                            *[
+                                Selection(style, style, i == 0)
+                                for i, style in enumerate(generator.STYLES)
+                            ],
                             id="style-list",
                         )
 
@@ -156,13 +155,6 @@ class SelectionScreen(Screen):
         db.init_db()
         self._update_stats()
 
-        # Set initial selections
-        cat_list = self.query_one("#category-list", OptionList)
-        cat_list.highlighted = 0
-
-        style_list = self.query_one("#style-list", OptionList)
-        style_list.highlighted = 0
-
     def _update_stats(self) -> None:
         """Update the stats display."""
         stats = preferences.get_stats()
@@ -184,18 +176,15 @@ class SelectionScreen(Screen):
 
         stats_display.update("\n".join(lines))
 
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        """Handle option selection for category and style."""
-        list_id = event.option_list.id
-        if list_id == "category-list":
-            self.selected_category = str(event.option.id)
-        elif list_id == "style-list":
-            self.selected_style = str(event.option.id)
-
     def on_selection_list_selection_toggled(self, event: SelectionList.SelectionToggled) -> None:
-        """Handle mood multi-selection toggle."""
-        mood_list = self.query_one("#mood-list", SelectionList)
-        self.selected_moods = list(mood_list.selected)
+        """Sync state when any of the three multi-select lists changes."""
+        list_id = event.selection_list.id
+        if list_id == "category-list":
+            self.selected_categories = list(event.selection_list.selected)
+        elif list_id == "style-list":
+            self.selected_styles = list(event.selection_list.selected)
+        elif list_id == "mood-list":
+            self.selected_moods = list(event.selection_list.selected)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
@@ -208,18 +197,23 @@ class SelectionScreen(Screen):
 
     def action_generate(self) -> None:
         """Generate a new wallpaper."""
+        if not self.selected_categories:
+            self.notify("Select at least one category", severity="warning")
+            return
+        if not self.selected_styles:
+            self.notify("Select at least one style", severity="warning")
+            return
         if not self.selected_moods:
             self.notify("Select at least one mood", severity="warning")
             return
 
         custom_input = self.query_one("#custom-input-field", Input).value or None
-        mood = ", ".join(self.selected_moods)
 
         self.app.push_screen(
             GeneratingScreen(
-                category=self.selected_category,
-                style=self.selected_style,
-                mood=mood,
+                category=", ".join(self.selected_categories),
+                style=", ".join(self.selected_styles),
+                mood=", ".join(self.selected_moods),
                 custom_input=custom_input,
             )
         )
