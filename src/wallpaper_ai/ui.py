@@ -420,15 +420,19 @@ class GeneratingScreen(Screen):
             await asyncio.sleep(0.1)  # Allow UI to update
 
             try:
-                enable_pywal, enable_hyprlock = get_theming_config()
+                theming = get_theming_config()
                 results = await asyncio.to_thread(
                     wallpaper.set_wallpaper,
                     image_path,
-                    apply_pywal=enable_pywal,
-                    update_hyprlock=enable_hyprlock,
+                    apply_pywal=theming["enable_pywal"],
+                    update_hyprlock=theming["enable_hyprlock"],
+                    apply_nvim=theming["enable_nvim"],
+                    nvim_reload_cmd=theming["nvim_reload_cmd"],
                 )
                 if results.get("pywal"):
                     self.notify("Terminal colors updated")
+                if results.get("nvim"):
+                    self.notify(f"Nvim colors reloaded ({results['nvim_instances']})")
                 if results.get("hyprlock"):
                     self.notify("Lock screen updated")
             except wallpaper.WallpaperError as e:
@@ -703,15 +707,19 @@ Prompt:
 
         gen = self.generations[self.selected_index]
         try:
-            enable_pywal, enable_hyprlock = get_theming_config()
+            theming = get_theming_config()
             results = wallpaper.set_wallpaper(
                 gen.image_path,
-                apply_pywal=enable_pywal,
-                update_hyprlock=enable_hyprlock,
+                apply_pywal=theming["enable_pywal"],
+                update_hyprlock=theming["enable_hyprlock"],
+                apply_nvim=theming["enable_nvim"],
+                nvim_reload_cmd=theming["nvim_reload_cmd"],
             )
             self.notify(f"Wallpaper set: {gen.image_path}")
             if results.get("pywal"):
                 self.notify("Terminal colors updated")
+            if results.get("nvim"):
+                self.notify(f"Nvim colors reloaded ({results['nvim_instances']})")
             if results.get("hyprlock"):
                 self.notify("Lock screen updated")
         except wallpaper.WallpaperError as e:

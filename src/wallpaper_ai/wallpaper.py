@@ -1,10 +1,15 @@
 """Wallpaper setting via awww with pywal and hyprlock integration."""
 
+import os
+import stat
 import subprocess
 from pathlib import Path
 from typing import Optional
 
 from . import db
+
+
+DEFAULT_NVIM_RELOAD_CMD = "silent! source $HOME/.cache/wal/colors-wal.vim"
 
 
 # Pywal template for Hyprland colors
@@ -222,6 +227,60 @@ def apply_pywal_colors(image_path: str | Path) -> dict:
     return results
 
 
+def _find_nvim_sockets() -> list[Path]:
+    """Find Unix sockets for running nvim instances in $XDG_RUNTIME_DIR."""
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime_dir:
+        runtime_dir = f"/run/user/{os.getuid()}"
+
+    runtime_path = Path(runtime_dir)
+    if not runtime_path.is_dir():
+        return []
+
+    sockets: list[Path] = []
+    for candidate in runtime_path.glob("nvim.*"):
+        try:
+            if stat.S_ISSOCK(candidate.stat().st_mode):
+                sockets.append(candidate)
+        except OSError:
+            continue
+    return sockets
+
+
+def reload_nvim_colors(reload_cmd: str = DEFAULT_NVIM_RELOAD_CMD) -> dict:
+    """Send a color-reload command to every running nvim instance.
+
+    Args:
+        reload_cmd: Ex-command to execute in each nvim. Leading ':' is stripped.
+            The command is sent as a <Cmd> keymap so it works in any mode
+            without disturbing the user's current buffer state.
+
+    Returns:
+        Dict with keys "nvim" (bool: any instance reached) and "instances"
+        (int: number of instances that accepted the command).
+    """
+    sockets = _find_nvim_sockets()
+    if not sockets:
+        return {"nvim": False, "instances": 0}
+
+    keys = f"<Cmd>{reload_cmd.lstrip(':').strip()}<CR>"
+
+    successes = 0
+    for sock in sockets:
+        try:
+            result = subprocess.run(
+                ["nvim", "--server", str(sock), "--remote-send", keys],
+                capture_output=True,
+                timeout=3,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        if result.returncode == 0:
+            successes += 1
+
+    return {"nvim": successes > 0, "instances": successes}
+
+
 def update_hyprlock_background(image_path: str | Path) -> bool:
     """Update hyprlock configuration with the new wallpaper.
 
@@ -313,6 +372,8 @@ def set_wallpaper(
     transition_fps: int = 60,
     apply_pywal: bool = True,
     update_hyprlock: bool = True,
+    apply_nvim: bool = True,
+    nvim_reload_cmd: str = DEFAULT_NVIM_RELOAD_CMD,
 ) -> dict:
     """Set the wallpaper using awww with optional pywal and hyprlock integration.
 
@@ -323,6 +384,8 @@ def set_wallpaper(
         transition_fps: Frames per second for transition
         apply_pywal: Whether to generate colors with pywal (terminal, Hyprland, Waybar)
         update_hyprlock: Whether to update hyprlock lock screen background
+        apply_nvim: Whether to reload running nvim instances after pywal
+        nvim_reload_cmd: Ex-command sent to each running nvim instance
 
     Returns:
         Dict with status of each operation
@@ -334,6 +397,8 @@ def set_wallpaper(
         "hyprland_colors": False,
         "waybar_colors": False,
         "hyprlock": False,
+        "nvim": False,
+        "nvim_instances": 0,
     }
 
     if not image_path.exists():
@@ -369,6 +434,12 @@ def set_wallpaper(
         results["pywal"] = pywal_results.get("pywal", False)
         results["hyprland_colors"] = pywal_results.get("hyprland_reload", False)
         results["waybar_colors"] = pywal_results.get("waybar_reload", False)
+
+        # Reload running nvim instances so they pick up the new palette
+        if apply_nvim and results["pywal"]:
+            nvim_results = reload_nvim_colors(nvim_reload_cmd)
+            results["nvim"] = nvim_results.get("nvim", False)
+            results["nvim_instances"] = nvim_results.get("instances", 0)
 
     # Update hyprlock background if enabled
     if update_hyprlock:
@@ -407,6 +478,8 @@ def get_current_wallpaper() -> Optional[str]:
 def set_latest_generated(
     apply_pywal: bool = True,
     update_hyprlock: bool = True,
+    apply_nvim: bool = True,
+    nvim_reload_cmd: str = DEFAULT_NVIM_RELOAD_CMD,
 ) -> Optional[str]:
     """Set the most recently generated wallpaper. Returns the path if successful."""
     generation = db.get_latest_generation()
@@ -415,6 +488,8 @@ def set_latest_generated(
             generation.image_path,
             apply_pywal=apply_pywal,
             update_hyprlock=update_hyprlock,
+            apply_nvim=apply_nvim,
+            nvim_reload_cmd=nvim_reload_cmd,
         )
         return generation.image_path
     return None

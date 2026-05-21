@@ -104,11 +104,13 @@ def generate(
 
         with console.status("Setting wallpaper..."):
             try:
-                enable_pywal, enable_hyprlock = get_theming_config()
+                theming = get_theming_config()
                 results = wallpaper.set_wallpaper(
                     image_path,
-                    apply_pywal=enable_pywal,
-                    update_hyprlock=enable_hyprlock,
+                    apply_pywal=theming["enable_pywal"],
+                    update_hyprlock=theming["enable_hyprlock"],
+                    apply_nvim=theming["enable_nvim"],
+                    nvim_reload_cmd=theming["nvim_reload_cmd"],
                 )
                 console.print("[green]Wallpaper set![/green]")
                 if results.get("pywal"):
@@ -117,6 +119,8 @@ def generate(
                     console.print("[dim]Hyprland border colors updated[/dim]")
                 if results.get("waybar_colors"):
                     console.print("[dim]Waybar colors updated[/dim]")
+                if results.get("nvim"):
+                    console.print(f"[dim]Nvim colors reloaded ({results['nvim_instances']} instance(s))[/dim]")
                 if results.get("hyprlock"):
                     console.print("[dim]Lock screen updated in hyprlock.conf[/dim]")
             except wallpaper.WallpaperError as e:
@@ -157,11 +161,13 @@ def _generate_random() -> None:
 
         with console.status("Setting wallpaper..."):
             try:
-                enable_pywal, enable_hyprlock = get_theming_config()
+                theming = get_theming_config()
                 results = wallpaper.set_wallpaper(
                     image_path,
-                    apply_pywal=enable_pywal,
-                    update_hyprlock=enable_hyprlock,
+                    apply_pywal=theming["enable_pywal"],
+                    update_hyprlock=theming["enable_hyprlock"],
+                    apply_nvim=theming["enable_nvim"],
+                    nvim_reload_cmd=theming["nvim_reload_cmd"],
                 )
                 console.print("[green]Wallpaper set![/green]")
                 if results.get("pywal"):
@@ -170,6 +176,8 @@ def _generate_random() -> None:
                     console.print("[dim]Hyprland border colors updated[/dim]")
                 if results.get("waybar_colors"):
                     console.print("[dim]Waybar colors updated[/dim]")
+                if results.get("nvim"):
+                    console.print(f"[dim]Nvim colors reloaded ({results['nvim_instances']} instance(s))[/dim]")
                 if results.get("hyprlock"):
                     console.print("[dim]Lock screen updated in hyprlock.conf[/dim]")
             except wallpaper.WallpaperError as e:
@@ -254,15 +262,19 @@ def set(generation_id: int) -> None:
         sys.exit(1)
 
     try:
-        enable_pywal, enable_hyprlock = get_theming_config()
+        theming = get_theming_config()
         results = wallpaper.set_wallpaper(
             gen.image_path,
-            apply_pywal=enable_pywal,
-            update_hyprlock=enable_hyprlock,
+            apply_pywal=theming["enable_pywal"],
+            update_hyprlock=theming["enable_hyprlock"],
+            apply_nvim=theming["enable_nvim"],
+            nvim_reload_cmd=theming["nvim_reload_cmd"],
         )
         console.print(f"[green]Wallpaper set: {gen.image_path}[/green]")
         if results.get("pywal"):
             console.print("[dim]Terminal colors updated via pywal[/dim]")
+        if results.get("nvim"):
+            console.print(f"[dim]Nvim colors reloaded ({results['nvim_instances']} instance(s))[/dim]")
         if results.get("hyprlock"):
             console.print("[dim]Lock screen updated in hyprlock.conf[/dim]")
     except wallpaper.WallpaperError as e:
@@ -319,6 +331,18 @@ enable_pywal = true
 # Enable hyprlock background updates
 # Automatically sets the lock screen wallpaper in ~/.config/hypr/hyprlock.conf
 enable_hyprlock = true
+
+# Reload running nvim instances after pywal generates new colors.
+# Sends nvim_reload_cmd via `nvim --remote-send` to every socket in
+# $XDG_RUNTIME_DIR/nvim.*. Set to false to leave running nvim alone.
+enable_nvim = true
+
+# Ex-command sent to each running nvim instance. The default sources
+# pywal's auto-generated vim colorscheme. For lushwal.nvim users:
+#   nvim_reload_cmd = "lua require('lushwal').reload_theme()"
+# For AlphaTechnolog/pywal.nvim users:
+#   nvim_reload_cmd = "colorscheme pywal"
+nvim_reload_cmd = "silent! source $HOME/.cache/wal/colors-wal.vim"
 
 [learning]
 # Number of ratings before regenerating preferences

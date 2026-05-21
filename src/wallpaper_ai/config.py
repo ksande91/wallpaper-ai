@@ -18,18 +18,23 @@ def load_config() -> dict:
     return {}
 
 
-def get_theming_config() -> tuple[bool, bool]:
+DEFAULT_NVIM_RELOAD_CMD = "silent! source $HOME/.cache/wal/colors-wal.vim"
+
+
+def get_theming_config() -> dict:
     """Get theming configuration options.
 
     Returns:
-        Tuple of (enable_pywal, enable_hyprlock)
+        Dict with keys: enable_pywal, enable_hyprlock, enable_nvim, nvim_reload_cmd.
     """
     config = load_config()
     theming = config.get("theming", {})
-    return (
-        theming.get("enable_pywal", True),
-        theming.get("enable_hyprlock", True),
-    )
+    return {
+        "enable_pywal": theming.get("enable_pywal", True),
+        "enable_hyprlock": theming.get("enable_hyprlock", True),
+        "enable_nvim": theming.get("enable_nvim", True),
+        "nvim_reload_cmd": theming.get("nvim_reload_cmd", DEFAULT_NVIM_RELOAD_CMD),
+    }
 
 
 def get_generation_config() -> dict:

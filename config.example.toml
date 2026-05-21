@@ -37,6 +37,18 @@ enable_pywal = true
 # Automatically sets the lock screen wallpaper in ~/.config/hypr/hyprlock.conf
 enable_hyprlock = true
 
+# Reload running nvim instances after pywal generates new colors.
+# Sends nvim_reload_cmd via `nvim --remote-send` to every socket in
+# $XDG_RUNTIME_DIR/nvim.*. Set to false to leave running nvim alone.
+enable_nvim = true
+
+# Ex-command sent to each running nvim instance. The default sources
+# pywal's auto-generated vim colorscheme. For lushwal.nvim users:
+#   nvim_reload_cmd = "lua require('lushwal').reload_theme()"
+# For AlphaTechnolog/pywal.nvim users:
+#   nvim_reload_cmd = "colorscheme pywal"
+nvim_reload_cmd = "silent! source $HOME/.cache/wal/colors-wal.vim"
+
 [learning]
 # Minimum number of ratings before generating preference summary
 min_ratings_for_preferences = 5
