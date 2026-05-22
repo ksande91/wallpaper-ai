@@ -378,9 +378,13 @@ class GeneratingScreen(Screen):
             self._update_step(1, "✨ Crafting prompt...")
             await asyncio.sleep(0.1)  # Allow UI to update
 
+            gen_config = get_generation_config()
+
             if self.random_mode:
                 prompt, category, style, mood = await asyncio.to_thread(
-                    generator.generate_random_prompt
+                    generator.generate_random_prompt,
+                    image_model=gen_config["model"],
+                    aspect_ratio=gen_config["aspect_ratio"],
                 )
                 self.category = category
                 self.style = style
@@ -395,13 +399,13 @@ class GeneratingScreen(Screen):
                     mood=self.mood,
                     custom_input=self.custom_input,
                     include_history=False,
+                    image_model=gen_config["model"],
+                    aspect_ratio=gen_config["aspect_ratio"],
                 )
 
             # Step 2: Generate image
             self._update_step(2, "🎨 Generating image...")
             await asyncio.sleep(0.1)  # Allow UI to update
-
-            gen_config = get_generation_config()
             image_path, generation_id = await asyncio.to_thread(
                 image.generate_image,
                 prompt=prompt,
@@ -428,6 +432,8 @@ class GeneratingScreen(Screen):
                     update_hyprlock=theming["enable_hyprlock"],
                     apply_nvim=theming["enable_nvim"],
                     nvim_reload_cmd=theming["nvim_reload_cmd"],
+                    apply_hue=theming["enable_hue"],
+                    apply_openrgb=theming["enable_openrgb"],
                 )
                 if results.get("pywal"):
                     self.notify("Terminal colors updated")
@@ -435,6 +441,10 @@ class GeneratingScreen(Screen):
                     self.notify(f"Nvim colors reloaded ({results['nvim_instances']})")
                 if results.get("hyprlock"):
                     self.notify("Lock screen updated")
+                if results.get("hue_lights"):
+                    self.notify("Hue lights updated")
+                if results.get("openrgb"):
+                    self.notify("OpenRGB devices updated")
             except wallpaper.WallpaperError as e:
                 # Don't fail completely if awww isn't running
                 self.notify(str(e), severity="warning")
@@ -714,6 +724,8 @@ Prompt:
                 update_hyprlock=theming["enable_hyprlock"],
                 apply_nvim=theming["enable_nvim"],
                 nvim_reload_cmd=theming["nvim_reload_cmd"],
+                apply_hue=theming["enable_hue"],
+                apply_openrgb=theming["enable_openrgb"],
             )
             self.notify(f"Wallpaper set: {gen.image_path}")
             if results.get("pywal"):
@@ -722,6 +734,10 @@ Prompt:
                 self.notify(f"Nvim colors reloaded ({results['nvim_instances']})")
             if results.get("hyprlock"):
                 self.notify("Lock screen updated")
+            if results.get("hue_lights"):
+                self.notify("Hue lights updated")
+            if results.get("openrgb"):
+                self.notify("OpenRGB devices updated")
         except wallpaper.WallpaperError as e:
             self.notify(str(e), severity="error")
 

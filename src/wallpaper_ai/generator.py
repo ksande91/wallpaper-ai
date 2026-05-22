@@ -53,21 +53,66 @@ def get_anthropic_key() -> str:
     return key
 
 
-def build_system_prompt() -> str:
-    """Build the system prompt for Claude."""
-    return """You are an expert at creating detailed, evocative image prompts for AI image generators.
+def _get_prompt_style(image_model: str) -> str:
+    """Determine the prompting style based on the target image model.
+
+    Returns one of: "sdxl", "flux", "natural"
+    """
+    model = image_model.lower()
+    if "sdxl" in model:
+        return "sdxl"
+    if "flux" in model:
+        return "flux"
+    # nano-banana, gemini, imagen, etc.
+    return "natural"
+
+
+def build_system_prompt(image_model: str = "", aspect_ratio: str = "16:9") -> str:
+    """Build the system prompt for Claude, tailored to the target image model."""
+    prompt_style = _get_prompt_style(image_model)
+
+    base = f"""You are an expert at creating image prompts for AI image generators.
 Your prompts should be optimized for generating stunning desktop wallpapers.
 
 Key requirements for all prompts:
-- Aspect ratio: 16:9 widescreen composition
+- Compose for {aspect_ratio} widescreen
 - No text, UI elements, watermarks, or signatures
 - Suitable for desktop wallpaper (balanced composition, not too busy in corners)
-- High quality, detailed descriptions that evoke mood and atmosphere
 - Focus on lighting, color palette, and atmosphere
-- IMPORTANT: Explicitly include the requested art style(s) in your prompt (e.g., "anime style", "digital painting", "oil painting style", "photorealistic"). The image generator needs clear style keywords to render correctly.
 - When the user supplies multiple categories or styles (comma-separated), blend them into a single coherent scene rather than describing them separately. Treat the combination as the creative brief (e.g., "Sci-Fi + Cyberpunk" → one scene with both genres infused).
 
 Output ONLY the prompt text, no explanations or formatting."""
+
+    if prompt_style == "sdxl":
+        base += """
+
+Prompt style guidance (targeting SDXL diffusion model):
+- Use comma-separated descriptive keywords and phrases
+- IMPORTANT: Explicitly include the requested art style (e.g., "anime style", "digital painting", "oil painting style", "photorealistic")
+- Include quality boosters like "masterpiece, best quality, highly detailed"
+- Mention specific rendering techniques (volumetric lighting, ray tracing, etc.)
+- Be explicit about composition and framing"""
+
+    elif prompt_style == "flux":
+        base += """
+
+Prompt style guidance (targeting Flux model):
+- Write in natural language but include clear descriptive details
+- Mention the art style naturally (e.g., "in the style of a digital painting")
+- Focus on describing the scene, mood, and atmosphere
+- Less keyword stacking than traditional diffusion models, but still be specific"""
+
+    else:  # natural - nano-banana, gemini, etc.
+        base += """
+
+Prompt style guidance (targeting a modern image model):
+- Write in clear, descriptive natural language
+- Describe the scene as you would to an artist: subject, setting, mood, lighting
+- Do NOT use comma-separated keyword lists or quality booster tags
+- The model handles style and quality natively, so focus on the creative vision
+- Keep the prompt focused and concise rather than exhaustively detailed"""
+
+    return base
 
 
 def build_examples_context(
@@ -121,8 +166,8 @@ def build_user_prompt(
         parts.append(f"- Additional input: {custom_input}")
 
     parts.append("""
-Create a detailed, evocative prompt that captures the essence of these selections.
-Remember: 16:9 aspect ratio, no text or UI elements, suitable for desktop wallpaper.""")
+Create a prompt that captures the essence of these selections.
+Remember: no text or UI elements, suitable for desktop wallpaper.""")
 
     return "\n".join(parts)
 
@@ -134,6 +179,8 @@ def generate_prompt(
     custom_input: Optional[str] = None,
     include_history: bool = True,
     model: str = "claude-sonnet-4-5-20250929",
+    image_model: str = "",
+    aspect_ratio: str = "16:9",
 ) -> str:
     """Generate an image prompt using Claude.
 
@@ -144,6 +191,8 @@ def generate_prompt(
         custom_input: Optional custom text input from user
         include_history: Whether to include rated examples
         model: Claude model to use
+        image_model: Target image generation model ID (e.g., "fal-ai/nano-banana-2")
+        aspect_ratio: Target aspect ratio string (e.g., "16:9", "21:9")
 
     Returns:
         The generated image prompt
@@ -176,7 +225,7 @@ def generate_prompt(
     message = client.messages.create(
         model=model,
         max_tokens=500,
-        system=build_system_prompt(),
+        system=build_system_prompt(image_model, aspect_ratio),
         messages=[
             {"role": "user", "content": user_prompt}
         ],
@@ -239,6 +288,8 @@ def _sample_dimension(
 
 def generate_random_prompt(
     model: str = "claude-sonnet-4-5-20250929",
+    image_model: str = "",
+    aspect_ratio: str = "16:9",
 ) -> tuple[str, str, str, str]:
     """Generate a random prompt using weighted sampling over rated history.
 
@@ -265,6 +316,8 @@ def generate_random_prompt(
         style=style,
         mood=mood,
         model=model,
+        image_model=image_model,
+        aspect_ratio=aspect_ratio,
     )
 
     return prompt, category, style, mood

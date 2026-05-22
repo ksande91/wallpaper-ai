@@ -6,7 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from . import db
+from . import db, hue, openrgb
+from .config import get_hue_config, get_openrgb_config
 
 
 DEFAULT_NVIM_RELOAD_CMD = "silent! source $HOME/.cache/wal/colors-wal.vim"
@@ -169,6 +170,59 @@ def init_color_files() -> None:
 
 class WallpaperError(Exception):
     """Error setting wallpaper."""
+
+
+def get_dominant_pywal_color_index() -> int:
+    """Find the most prominent accent color in pywal's palette.
+
+    Analyzes colors 1-6 using HSV saturation (chroma / max brightness)
+    and returns the index of the most vivid color - the one that
+    visually stands out the most.
+
+    Returns:
+        Color index (1-6), defaults to 1 if colors can't be read.
+    """
+    colors_file = Path.home() / ".cache" / "wal" / "colors"
+    try:
+        colors = colors_file.read_text().strip().splitlines()
+    except OSError:
+        return 1
+
+    best_index = 1
+    best_saturation = 0.0
+
+    for i in range(1, min(7, len(colors))):
+        hex_color = colors[i].strip().lstrip("#")
+        if len(hex_color) != 6:
+            continue
+
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+
+        max_c = max(r, g, b)
+        min_c = min(r, g, b)
+
+        # HSV saturation: measures color purity independent of brightness
+        saturation = (max_c - min_c) / max_c if max_c > 0 else 0.0
+
+        if saturation > best_saturation:
+            best_saturation = saturation
+            best_index = i
+
+    return best_index
+
+
+def _resolve_color_map(color_map: dict[str, int | str]) -> dict[str, int]:
+    """Resolve 'dominant' entries in a color map to actual pywal color indices."""
+    if not any(isinstance(v, str) for v in color_map.values()):
+        return color_map
+
+    dominant_index = get_dominant_pywal_color_index()
+    return {
+        k: (dominant_index if isinstance(v, str) and v == "dominant" else v)
+        for k, v in color_map.items()
+    }
 
 
 def check_pywal_available() -> bool:
@@ -374,8 +428,10 @@ def set_wallpaper(
     update_hyprlock: bool = True,
     apply_nvim: bool = True,
     nvim_reload_cmd: str = DEFAULT_NVIM_RELOAD_CMD,
+    apply_hue: bool = False,
+    apply_openrgb: bool = False,
 ) -> dict:
-    """Set the wallpaper using awww with optional pywal and hyprlock integration.
+    """Set the wallpaper using awww with optional pywal, hyprlock, nvim, Hue, and OpenRGB integration.
 
     Args:
         image_path: Path to the image file
@@ -386,6 +442,8 @@ def set_wallpaper(
         update_hyprlock: Whether to update hyprlock lock screen background
         apply_nvim: Whether to reload running nvim instances after pywal
         nvim_reload_cmd: Ex-command sent to each running nvim instance
+        apply_hue: Whether to update Philips Hue lights with palette colors
+        apply_openrgb: Whether to update OpenRGB devices with palette colors
 
     Returns:
         Dict with status of each operation
@@ -399,6 +457,8 @@ def set_wallpaper(
         "hyprlock": False,
         "nvim": False,
         "nvim_instances": 0,
+        "hue_lights": False,
+        "openrgb": False,
     }
 
     if not image_path.exists():
@@ -445,6 +505,23 @@ def set_wallpaper(
     if update_hyprlock:
         results["hyprlock"] = update_hyprlock_background(image_path)
 
+    # Update Hue lights if enabled and pywal succeeded
+    if apply_hue and results["pywal"]:
+        hue_config = get_hue_config()
+        light_map = _resolve_color_map(hue_config["lights"])
+        results["hue_lights"] = hue.apply_hue_colors(
+            bridge_ip=hue_config["bridge_ip"],
+            api_key=hue_config["api_key"],
+            light_color_map=light_map,
+            transition_time=hue_config["transition_time"],
+            brightness=hue_config["brightness"],
+        )
+
+    # Update OpenRGB devices if enabled and pywal succeeded
+    if apply_openrgb and results["pywal"]:
+        openrgb_devices = _resolve_color_map(get_openrgb_config())
+        results["openrgb"] = openrgb.apply_openrgb_colors(openrgb_devices)
+
     return results
 
 
@@ -480,6 +557,8 @@ def set_latest_generated(
     update_hyprlock: bool = True,
     apply_nvim: bool = True,
     nvim_reload_cmd: str = DEFAULT_NVIM_RELOAD_CMD,
+    apply_hue: bool = False,
+    apply_openrgb: bool = False,
 ) -> Optional[str]:
     """Set the most recently generated wallpaper. Returns the path if successful."""
     generation = db.get_latest_generation()
@@ -490,6 +569,8 @@ def set_latest_generated(
             update_hyprlock=update_hyprlock,
             apply_nvim=apply_nvim,
             nvim_reload_cmd=nvim_reload_cmd,
+            apply_hue=apply_hue,
+            apply_openrgb=apply_openrgb,
         )
         return generation.image_path
     return None

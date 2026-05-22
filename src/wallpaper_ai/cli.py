@@ -9,8 +9,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from . import db, generator, image, preferences, wallpaper, ui
-from .config import get_config_path, load_config, get_theming_config, get_generation_config
+from . import db, generator, hue, image, openrgb, preferences, wallpaper, ui
+from .config import get_config_path, load_config, get_theming_config, get_generation_config, get_hue_config, get_openrgb_config
+from .wallpaper import _resolve_color_map
 
 console = Console()
 
@@ -75,6 +76,7 @@ def generate(
     console.print(f"[blue]Generating wallpaper: {category} / {style} / {mood_str}[/blue]")
 
     try:
+        gen_config = get_generation_config()
         with console.status("Generating prompt..."):
             prompt = generator.generate_prompt(
                 category=category,
@@ -82,11 +84,11 @@ def generate(
                 mood=mood_str,
                 custom_input=custom,
                 include_history=False,
+                image_model=gen_config["model"],
+                aspect_ratio=gen_config["aspect_ratio"],
             )
 
         console.print(f"[dim]Prompt: {prompt[:100]}...[/dim]")
-
-        gen_config = get_generation_config()
         with console.status("Generating image..."):
             image_path, gen_id = image.generate_image(
                 prompt=prompt,
@@ -111,6 +113,8 @@ def generate(
                     update_hyprlock=theming["enable_hyprlock"],
                     apply_nvim=theming["enable_nvim"],
                     nvim_reload_cmd=theming["nvim_reload_cmd"],
+                    apply_hue=theming["enable_hue"],
+                    apply_openrgb=theming["enable_openrgb"],
                 )
                 console.print("[green]Wallpaper set![/green]")
                 if results.get("pywal"):
@@ -123,6 +127,10 @@ def generate(
                     console.print(f"[dim]Nvim colors reloaded ({results['nvim_instances']} instance(s))[/dim]")
                 if results.get("hyprlock"):
                     console.print("[dim]Lock screen updated in hyprlock.conf[/dim]")
+                if results.get("hue_lights"):
+                    console.print("[dim]Hue lights updated[/dim]")
+                if results.get("openrgb"):
+                    console.print("[dim]OpenRGB devices updated[/dim]")
             except wallpaper.WallpaperError as e:
                 console.print(f"[yellow]Warning: {e}[/yellow]")
 
@@ -138,13 +146,15 @@ def _generate_random() -> None:
     console.print("[blue]Generating random wallpaper using learned preferences...[/blue]")
 
     try:
+        gen_config = get_generation_config()
         with console.status("Analyzing preferences..."):
-            prompt, category, style, mood = generator.generate_random_prompt()
+            prompt, category, style, mood = generator.generate_random_prompt(
+                image_model=gen_config["model"],
+                aspect_ratio=gen_config["aspect_ratio"],
+            )
 
         console.print(f"[blue]Selected: {category} / {style} / {mood}[/blue]")
         console.print(f"[dim]Prompt: {prompt[:100]}...[/dim]")
-
-        gen_config = get_generation_config()
         with console.status("Generating image..."):
             image_path, gen_id = image.generate_image(
                 prompt=prompt,
@@ -168,6 +178,8 @@ def _generate_random() -> None:
                     update_hyprlock=theming["enable_hyprlock"],
                     apply_nvim=theming["enable_nvim"],
                     nvim_reload_cmd=theming["nvim_reload_cmd"],
+                    apply_hue=theming["enable_hue"],
+                    apply_openrgb=theming["enable_openrgb"],
                 )
                 console.print("[green]Wallpaper set![/green]")
                 if results.get("pywal"):
@@ -180,6 +192,10 @@ def _generate_random() -> None:
                     console.print(f"[dim]Nvim colors reloaded ({results['nvim_instances']} instance(s))[/dim]")
                 if results.get("hyprlock"):
                     console.print("[dim]Lock screen updated in hyprlock.conf[/dim]")
+                if results.get("hue_lights"):
+                    console.print("[dim]Hue lights updated[/dim]")
+                if results.get("openrgb"):
+                    console.print("[dim]OpenRGB devices updated[/dim]")
             except wallpaper.WallpaperError as e:
                 console.print(f"[yellow]Warning: {e}[/yellow]")
 
@@ -269,6 +285,8 @@ def set(generation_id: int) -> None:
             update_hyprlock=theming["enable_hyprlock"],
             apply_nvim=theming["enable_nvim"],
             nvim_reload_cmd=theming["nvim_reload_cmd"],
+            apply_hue=theming["enable_hue"],
+            apply_openrgb=theming["enable_openrgb"],
         )
         console.print(f"[green]Wallpaper set: {gen.image_path}[/green]")
         if results.get("pywal"):
@@ -277,6 +295,10 @@ def set(generation_id: int) -> None:
             console.print(f"[dim]Nvim colors reloaded ({results['nvim_instances']} instance(s))[/dim]")
         if results.get("hyprlock"):
             console.print("[dim]Lock screen updated in hyprlock.conf[/dim]")
+        if results.get("hue_lights"):
+            console.print("[dim]Hue lights updated[/dim]")
+        if results.get("openrgb"):
+            console.print("[dim]OpenRGB devices updated[/dim]")
     except wallpaper.WallpaperError as e:
         console.print(f"[red]Error: {e}[/red]")
         sys.exit(1)
@@ -344,6 +366,29 @@ enable_nvim = true
 #   nvim_reload_cmd = "colorscheme pywal"
 nvim_reload_cmd = "silent! source $HOME/.cache/wal/colors-wal.vim"
 
+# Enable Philips Hue light integration
+# Run 'wallpaper-ai hue-setup' to configure
+# enable_hue = false
+
+# [hue]
+# bridge_ip = ""
+# api_key = ""
+# transition_time = 10  # In 100ms units (10 = 1 second)
+
+# [hue.lights]
+# light_id = palette_color_index (0-15)
+# "1" = 1   # Light strip -> color1 (primary accent)
+# "3" = 4   # Bulb -> color4 (contrasting accent)
+
+# Enable OpenRGB integration for PC RGB hardware
+# Run 'wallpaper-ai openrgb-test' to list devices and test
+# enable_openrgb = false
+
+# [openrgb.devices]
+# device_id = palette_color_index (0-15)
+# "0" = 1   # RAM -> color1 (primary accent)
+# "1" = 2   # Motherboard -> color2
+
 [learning]
 # Number of ratings before regenerating preferences
 ratings_threshold = 10
@@ -383,6 +428,233 @@ ratings_threshold = 10
     # Print keybinds
     console.print("\n[blue]Add these keybinds to your Hyprland config:[/blue]")
     console.print(wallpaper.generate_hyprland_keybinds())
+
+
+@main.command(name="hue-setup")
+def hue_setup() -> None:
+    """Set up Philips Hue bridge integration.
+
+    Discovers bridges, registers an API key (press bridge link button first),
+    and lists available lights.
+    """
+    # Step 1: Discover bridges
+    console.print("[blue]Discovering Hue bridges...[/blue]")
+    try:
+        bridges = hue.discover_bridges()
+    except hue.HueError as e:
+        console.print(f"[red]Discovery failed: {e}[/red]")
+        console.print("[dim]You can manually specify bridge_ip in config.toml[/dim]")
+        return
+
+    if not bridges:
+        console.print("[yellow]No bridges found on network[/yellow]")
+        console.print("[dim]You can manually specify bridge_ip in config.toml[/dim]")
+        return
+
+    bridge_ip = bridges[0].get("internalipaddress", "")
+    console.print(f"[green]Found bridge: {bridge_ip}[/green]")
+
+    if len(bridges) > 1:
+        for b in bridges:
+            console.print(f"  [dim]{b.get('id', '?')}: {b.get('internalipaddress', '?')}[/dim]")
+        console.print(f"[dim]Using first bridge. Set bridge_ip in config.toml to override.[/dim]")
+
+    # Step 2: Register API key
+    console.print("\n[yellow]Press the link button on your Hue bridge, then press Enter...[/yellow]")
+    input()
+
+    try:
+        api_key = hue.register_api_key(bridge_ip)
+        console.print(f"[green]API key registered: {api_key}[/green]")
+    except hue.HueError as e:
+        console.print(f"[red]Registration failed: {e}[/red]")
+        console.print("[dim]Make sure you pressed the link button within 30 seconds[/dim]")
+        return
+
+    # Step 3: List lights
+    try:
+        lights = hue.list_lights(bridge_ip, api_key)
+    except hue.HueError as e:
+        console.print(f"[red]Failed to list lights: {e}[/red]")
+        lights = {}
+
+    if lights:
+        table = Table(title="Available Lights")
+        table.add_column("ID", style="cyan")
+        table.add_column("Name")
+        table.add_column("Type")
+        table.add_column("State")
+
+        for light_id, info in lights.items():
+            name = info.get("name", "?")
+            light_type = info.get("type", "?")
+            state = "on" if info.get("state", {}).get("on") else "off"
+            table.add_row(light_id, name, light_type, state)
+
+        console.print(table)
+
+    # Print config snippet
+    console.print("\n[blue]Add this to your ~/.config/wallpaper-ai/config.toml:[/blue]")
+    config_snippet = f"""
+[theming]
+enable_hue = true
+
+[hue]
+bridge_ip = "{bridge_ip}"
+api_key = "{api_key}"
+transition_time = 10  # In 100ms units (10 = 1 second)
+
+[hue.lights]
+# light_id = palette_color_index (0-15)
+# Colors 1-6 are vibrant accents extracted from the wallpaper"""
+
+    for light_id in lights:
+        name = lights[light_id].get("name", "?")
+        config_snippet += f'\n# "{light_id}" = 1  # {name} -> color1 (primary accent)'
+
+    console.print(config_snippet)
+
+
+@main.command(name="hue-test")
+def hue_test() -> None:
+    """Test Philips Hue bridge connection and optionally apply current colors."""
+    hue_config = get_hue_config()
+
+    if not hue_config["bridge_ip"] or not hue_config["api_key"]:
+        console.print("[red]Hue not configured. Run 'wallpaper-ai hue-setup' first.[/red]")
+        return
+
+    bridge_ip = hue_config["bridge_ip"]
+    api_key = hue_config["api_key"]
+
+    # List current light states
+    console.print(f"[blue]Connecting to bridge at {bridge_ip}...[/blue]")
+    try:
+        lights = hue.list_lights(bridge_ip, api_key)
+    except hue.HueError as e:
+        console.print(f"[red]Connection failed: {e}[/red]")
+        return
+
+    table = Table(title="Light States")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("On")
+    table.add_column("Brightness")
+    table.add_column("Configured")
+
+    configured_lights = hue_config["lights"]
+    for light_id, info in lights.items():
+        name = info.get("name", "?")
+        state = info.get("state", {})
+        on = "yes" if state.get("on") else "no"
+        bri = str(state.get("bri", "?"))
+        configured = f"color{configured_lights[light_id]}" if light_id in configured_lights else "-"
+        table.add_row(light_id, name, on, bri, configured)
+
+    console.print(table)
+
+    # Try applying current pywal colors if configured
+    if configured_lights:
+        console.print("\n[blue]Applying current pywal colors to configured lights...[/blue]")
+        success = hue.apply_hue_colors(
+            bridge_ip=bridge_ip,
+            api_key=api_key,
+            light_color_map=configured_lights,
+            transition_time=hue_config["transition_time"],
+            brightness=hue_config["brightness"],
+        )
+        if success:
+            console.print("[green]Hue lights updated![/green]")
+        else:
+            console.print("[yellow]Failed to update lights. Check pywal colors exist (~/.cache/wal/colors)[/yellow]")
+    else:
+        console.print("\n[yellow]No lights configured in [hue.lights] section[/yellow]")
+
+
+@main.command(name="apply-lights")
+def apply_lights() -> None:
+    """Apply current pywal colors to configured Hue lights and OpenRGB devices."""
+    _, _, enable_hue, enable_openrgb = get_theming_config()
+    any_success = False
+
+    if enable_hue:
+        hue_config = get_hue_config()
+        if hue_config["bridge_ip"] and hue_config["api_key"] and hue_config["lights"]:
+            light_map = _resolve_color_map(hue_config["lights"])
+            success = hue.apply_hue_colors(
+                bridge_ip=hue_config["bridge_ip"],
+                api_key=hue_config["api_key"],
+                light_color_map=light_map,
+                transition_time=hue_config["transition_time"],
+                brightness=hue_config["brightness"],
+            )
+            if success:
+                console.print("[green]Hue lights updated[/green]")
+                any_success = True
+            else:
+                console.print("[yellow]Failed to update Hue lights[/yellow]")
+        else:
+            console.print("[yellow]Hue enabled but not fully configured. Run 'wallpaper-ai hue-setup'.[/yellow]")
+
+    if enable_openrgb:
+        device_map = get_openrgb_config()
+        if device_map:
+            device_map = _resolve_color_map(device_map)
+            success = openrgb.apply_openrgb_colors(device_map)
+            if success:
+                console.print("[green]OpenRGB devices updated[/green]")
+                any_success = True
+            else:
+                console.print("[yellow]Failed to update OpenRGB devices[/yellow]")
+        else:
+            console.print("[yellow]OpenRGB enabled but no devices configured[/yellow]")
+
+    if not enable_hue and not enable_openrgb:
+        console.print("[yellow]No light integrations enabled in config.toml[/yellow]")
+    elif not any_success:
+        console.print("[dim]Check that ~/.cache/wal/colors exists (run pywal first)[/dim]")
+
+
+@main.command(name="openrgb-test")
+def openrgb_test() -> None:
+    """List OpenRGB devices and apply current pywal colors."""
+    # List devices
+    console.print("[blue]Detecting OpenRGB devices...[/blue]")
+    devices = openrgb.list_devices()
+
+    if not devices:
+        console.print("[yellow]No devices found. Is OpenRGB running? (openrgb --server)[/yellow]")
+        return
+
+    table = Table(title="OpenRGB Devices")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Type")
+    table.add_column("Configured")
+
+    device_map = get_openrgb_config()
+    for dev in devices:
+        configured = f"color{device_map[dev['id']]}" if dev["id"] in device_map else "-"
+        table.add_row(dev["id"], dev["name"], dev["type"], configured)
+
+    console.print(table)
+
+    # Apply current pywal colors if any devices are configured
+    if device_map:
+        console.print("\n[blue]Applying current pywal colors to configured devices...[/blue]")
+        success = openrgb.apply_openrgb_colors(device_map)
+        if success:
+            console.print("[green]OpenRGB devices updated![/green]")
+        else:
+            console.print("[yellow]Failed to update devices. Check pywal colors exist (~/.cache/wal/colors)[/yellow]")
+    else:
+        console.print("\n[yellow]No devices configured in [openrgb.devices] section[/yellow]")
+        console.print("[dim]Add this to ~/.config/wallpaper-ai/config.toml:[/dim]")
+        console.print()
+        config_snippet = "[theming]\nenable_openrgb = true\n\n[openrgb.devices]\n# device_id = palette_color_index (0-15)"
+        for dev in devices:
+            config_snippet += f'\n# "{dev["id"]}" = 1  # {dev["name"]} -> color1'
+        console.print(config_snippet)
 
 
 if __name__ == "__main__":

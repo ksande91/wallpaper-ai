@@ -25,7 +25,8 @@ def get_theming_config() -> dict:
     """Get theming configuration options.
 
     Returns:
-        Dict with keys: enable_pywal, enable_hyprlock, enable_nvim, nvim_reload_cmd.
+        Dict with keys: enable_pywal, enable_hyprlock, enable_nvim,
+        nvim_reload_cmd, enable_hue, enable_openrgb.
     """
     config = load_config()
     theming = config.get("theming", {})
@@ -34,7 +35,53 @@ def get_theming_config() -> dict:
         "enable_hyprlock": theming.get("enable_hyprlock", True),
         "enable_nvim": theming.get("enable_nvim", True),
         "nvim_reload_cmd": theming.get("nvim_reload_cmd", DEFAULT_NVIM_RELOAD_CMD),
+        "enable_hue": theming.get("enable_hue", False),
+        "enable_openrgb": theming.get("enable_openrgb", False),
     }
+
+
+def get_hue_config() -> dict:
+    """Get Hue bridge configuration.
+
+    Returns:
+        Dict with bridge_ip, api_key, transition_time, and lights mapping.
+        Light values can be int (color index) or "dominant" (auto-detect).
+    """
+    config = load_config()
+    hue = config.get("hue", {})
+    lights_raw = hue.get("lights", {})
+    lights = {}
+    for k, v in lights_raw.items():
+        if isinstance(v, str) and v.lower() == "dominant":
+            lights[str(k)] = "dominant"
+        else:
+            lights[str(k)] = int(v)
+    return {
+        "bridge_ip": hue.get("bridge_ip", ""),
+        "api_key": hue.get("api_key", ""),
+        "transition_time": hue.get("transition_time", 10),
+        "brightness": hue.get("brightness", 254),
+        "lights": lights,
+    }
+
+
+def get_openrgb_config() -> dict[str, int | str]:
+    """Get OpenRGB device-to-color mapping.
+
+    Returns:
+        Dict mapping device IDs (str) to palette color indices (int)
+        or "dominant" for auto-detected prominent color.
+    """
+    config = load_config()
+    openrgb = config.get("openrgb", {})
+    devices_raw = openrgb.get("devices", {})
+    result = {}
+    for k, v in devices_raw.items():
+        if isinstance(v, str) and v.lower() == "dominant":
+            result[str(k)] = "dominant"
+        else:
+            result[str(k)] = int(v)
+    return result
 
 
 def get_generation_config() -> dict:
@@ -74,9 +121,17 @@ def get_generation_config() -> dict:
     else:
         model_id = gemini_models.get(model_name, model_name)
 
+    width = generation.get("width", 1920)
+    height = generation.get("height", 1080)
+
+    from math import gcd
+    g = gcd(width, height)
+    aspect_ratio = f"{width // g}:{height // g}"
+
     return {
         "provider": provider,
         "model": model_id,
-        "width": generation.get("width", 1920),
-        "height": generation.get("height", 1080),
+        "width": width,
+        "height": height,
+        "aspect_ratio": aspect_ratio,
     }

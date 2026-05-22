@@ -27,6 +27,7 @@ AVAILABLE_MODELS = {
 
 GEMINI_MODELS = {
     "imagen-3": "imagen-3.0-generate-002",
+    "imagen-4": "imagen-4.0-generate-001",
     "gemini-2.5-flash-image": "gemini-2.5-flash-image",
     "gemini-3-pro": "gemini-3-pro-image-preview",
 }
@@ -47,18 +48,31 @@ GEMINI_ASPECT_RATIOS = [
 
 
 def get_closest_gemini_aspect_ratio(width: int, height: int) -> str:
-    """Find the closest supported Gemini aspect ratio for given dimensions.
+    """Find the closest supported Gemini aspect ratio for given dimensions."""
+    return get_closest_aspect_ratio(width, height, GEMINI_ASPECT_RATIOS)
+
+# Supported aspect ratios for nano-banana-2
+NANO_BANANA_ASPECT_RATIOS = [
+    (1, 1), (2, 3), (3, 2), (3, 4), (4, 3),
+    (4, 5), (5, 4), (9, 16), (16, 9), (21, 9),
+]
+
+
+def get_closest_aspect_ratio(width: int, height: int, ratios: list[tuple[int, int]]) -> str:
+    """Find the closest supported aspect ratio for given dimensions.
 
     Args:
         width: Target width
         height: Target height
+        ratios: List of supported (w, h) ratio tuples
 
     Returns:
-        Aspect ratio string like "16:9" or "21:9"
+        Aspect ratio string like "16:9"
     """
     target_ratio = width / height
-    closest = min(GEMINI_ASPECT_RATIOS, key=lambda r: abs(r[0] / r[1] - target_ratio))
+    closest = min(ratios, key=lambda r: abs(r[0] / r[1] - target_ratio))
     return f"{closest[0]}:{closest[1]}"
+
 
 def get_resolution_for_size(width: int, height: int) -> str:
     """Map target dimensions to a Nano Banana 2 resolution tier."""
@@ -321,17 +335,19 @@ def generate_image(
     is_nano_banana = "nano-banana" in model
 
     if is_nano_banana:
-        # Nano Banana 2 uses aspect_ratio and resolution instead of image_size
+        # nano-banana-2 uses aspect_ratio + resolution instead of pixel dimensions
+        aspect_ratio = get_closest_aspect_ratio(width, height, NANO_BANANA_ASPECT_RATIOS)
         resolution = get_resolution_for_size(width, height)
         arguments = {
             "prompt": prompt,
-            "num_images": 1,
-            "aspect_ratio": "auto",
+            "aspect_ratio": aspect_ratio,
             "resolution": resolution,
+            "num_images": 1,
+            "output_format": "png",
         }
         upscale_factor = 1
         gen_width, gen_height = width, height
-        print(f"DEBUG: Nano Banana 2 with aspect_ratio=auto, resolution={resolution}")
+        print(f"DEBUG: nano-banana-2 aspect_ratio={aspect_ratio}, resolution={resolution}")
     else:
         # Calculate optimal generation size (may need upscaling for ultrawide)
         gen_width, gen_height, upscale_factor = calculate_generation_size(width, height)
@@ -353,8 +369,8 @@ def generate_image(
         else:
             arguments["enable_safety_checker"] = True
 
-    # Debug: print what we're sending
-    print(f"DEBUG: Target size: {width}x{height}, generating at: {gen_width}x{gen_height}, upscale: {upscale_factor}x")
+        print(f"DEBUG: Target size: {width}x{height}, generating at: {gen_width}x{gen_height}, upscale: {upscale_factor}x")
+
     print(f"DEBUG: Sending to model: {model}")
 
     # Generate the image
@@ -476,13 +492,16 @@ async def generate_image_async(
     is_nano_banana = "nano-banana" in model
 
     if is_nano_banana:
+        aspect_ratio = get_closest_aspect_ratio(width, height, NANO_BANANA_ASPECT_RATIOS)
         resolution = get_resolution_for_size(width, height)
         arguments = {
             "prompt": prompt,
-            "num_images": 1,
-            "aspect_ratio": "auto",
+            "aspect_ratio": aspect_ratio,
             "resolution": resolution,
+            "num_images": 1,
+            "output_format": "png",
         }
+        upscale_factor = 1
     else:
         # Calculate optimal generation size (may need upscaling for ultrawide)
         gen_width, gen_height, upscale_factor = calculate_generation_size(width, height)
